@@ -28,6 +28,7 @@ const Agent = ({
                    feedbackId,
                    type,
                    questions,
+                   profileImage
                }: AgentProps) => {
     const router = useRouter();
     const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);

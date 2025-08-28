@@ -91,6 +91,11 @@ export async function getFeedbackByInterviewId(
 ): Promise<Feedback | null> {
     const { interviewId, userId } = params;
 
+    if (!userId || !interviewId) {
+        console.warn('No valid userId or interviewId provided; returning null.');
+        return null;
+    }
+
     const querySnapshot = await db
         .collection("feedback")
         .where("interviewId", "==", interviewId)
@@ -109,6 +114,11 @@ export async function getLatestInterviews(
 ): Promise<Interview[] | null> {
     const { userId, limit = 20 } = params;
 
+    if (!userId) {
+        console.warn('No valid userId provided; returning empty array.');
+        return [];
+    }
+
     const interviews = await db
         .collection("interviews")
         .orderBy("createdAt", "desc")
@@ -126,6 +136,11 @@ export async function getLatestInterviews(
 export async function getInterviewsByUserId(
     userId: string
 ): Promise<Interview[] | null> {
+    if (!userId) {
+        console.warn('No valid userId provided; returning empty array.');
+        return [];
+    }
+
     const interviews = await db
         .collection("interviews")
         .where("userId", "==", userId)
