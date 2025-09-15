@@ -5,17 +5,51 @@ import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
 
 export async function POST(request: Request) {
-    const {
-        type,
-        role,
-        level = "Mid-level",
-        techstack = "",
-        amount = "5",
-        userid,
-        duration = "15 minutes"
-    } = await request.json();
-
     try {
+        const {
+            type,
+            role,
+            level = "Mid-level",
+            techstack = "",
+            amount = "5",
+            userid,
+            duration = "15 minutes",
+            completed = false
+        } = await request.json();
+
+        console.log("API Request received:", {
+            type,
+            role,
+            level,
+            techstack,
+            amount,
+            userid,
+            duration,
+            completed
+        });
+
+        // Validate required fields
+        if (!type) {
+            return Response.json({
+                success: false,
+                error: "Interview type is required"
+            }, { status: 400 });
+        }
+
+        if (!role) {
+            return Response.json({
+                success: false,
+                error: "Role is required"
+            }, { status: 400 });
+        }
+
+        if (!userid) {
+            return Response.json({
+                success: false,
+                error: "User ID is required"
+            }, { status: 400 });
+        }
+
         // Create different prompts based on interview type
         let prompt = "";
 
@@ -82,10 +116,14 @@ export async function POST(request: Request) {
         - Ensure each question is clear and specific
         - No additional text or explanations, just the JSON array`;
 
+        console.log("Generating questions with AI...");
+
         const { text: questions } = await generateText({
             model: google("gemini-2.0-flash-001"),
             prompt: prompt,
         });
+
+        console.log("AI Response received:", questions);
 
         // Clean and parse the response
         let cleanedQuestions;
@@ -109,20 +147,27 @@ export async function POST(request: Request) {
             ];
         }
 
+        console.log("Parsed questions:", cleanedQuestions);
+
         const interview = {
             role: role,
             type: type,
             level: level,
-            techstack: techstack ? techstack.split(",").map(tech => tech.trim()) : [],
+            techstack: techstack ? techstack.split(",").map((tech: string) => tech.trim()) : [],
             questions: cleanedQuestions,
             userId: userid,
             finalized: true, // Mark as finalized so it shows in the interviews list
             coverImage: getRandomInterviewCover(),
             createdAt: new Date().toISOString(),
-            questionCount: questioncount || amount,
+            questionCount: parseInt(amount) || 5,
+            completed: completed || false,
         };
 
+        console.log("Creating interview document:", interview);
+
         const docRef = await db.collection("interviews").add(interview);
+
+        console.log("Interview created successfully with ID:", docRef.id);
 
         return Response.json({
             success: true,
@@ -131,11 +176,23 @@ export async function POST(request: Request) {
         }, { status: 200 });
 
     } catch (error) {
-        console.error("Error creating interview:", error);
+        console.error("Detailed error creating interview:", error);
+
+        // More detailed error logging
+        if (error instanceof Error) {
+            console.error("Error name:", error.name);
+            console.error("Error message:", error.message);
+            console.error("Error stack:", error.stack);
+        }
+
         return Response.json({
             success: false,
             error: "Failed to create interview",
-            message: error instanceof Error ? error.message : "Unknown error"
+            message: error instanceof Error ? error.message : "Unknown error",
+            details: error instanceof Error ? {
+                name: error.name,
+                message: error.message
+            } : null
         }, { status: 500 });
     }
 }

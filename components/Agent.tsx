@@ -48,6 +48,7 @@ const Agent = ({
     const [lastMessage, setLastMessage] = useState<string>("");
     const [showSetup, setShowSetup] = useState(type === "generate");
     const [setupData, setSetupData] = useState<InterviewSetupData | null>(null);
+    const [createdInterviewId, setCreatedInterviewId] = useState<string | null>(null);
 
     useEffect(() => {
         const onCallStart = () => {
@@ -101,44 +102,127 @@ const Agent = ({
             setLastMessage(messages[messages.length - 1].content);
         }
 
-        const handleGenerateFeedback = async (messages: SavedMessage[]) => {
-            console.log("handleGenerateFeedback");
+        const handleGenerateFeedback = async (messages: SavedMessage[], targetInterviewId: string) => {
+            console.log("handleGenerateFeedback for interview:", targetInterviewId);
 
-            const { success, feedbackId: id } = await createFeedback({
-                interviewId: interviewId!,
-                userId: userId!,
-                transcript: messages,
-                feedbackId,
-            });
+            if (messages.length === 0) {
+                console.log("No messages to generate feedback from");
+                router.push("/");
+                return;
+            }
 
-            if (success && id) {
-                router.push(`/interview/${interviewId}/feedback`);
-            } else {
-                console.log("Error saving feedback");
+            try {
+                const { success, feedbackId: id } = await createFeedback({
+                    interviewId: targetInterviewId,
+                    userId: userId!,
+                    transcript: messages,
+                    feedbackId: type === "interview" ? feedbackId : undefined,
+                });
+
+                if (success && id) {
+                    console.log("Feedback created successfully, redirecting to feedback page");
+                    router.push(`/interview/${targetInterviewId}/feedback`);
+                } else {
+                    console.log("Error saving feedback");
+                    router.push("/");
+                }
+            } catch (error) {
+                console.error("Error in handleGenerateFeedback:", error);
+                router.push("/");
+            }
+        };
+
+        const createNewInterviewWithFeedback = async (messages: SavedMessage[], setupData: InterviewSetupData) => {
+            console.log("Creating new interview with feedback", { setupData, messageCount: messages.length });
+
+            try {
+                // First create the interview record
+                const response = await fetch('/api/vapi/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: setupData.interviewType,
+                        role: setupData.role,
+                        level: setupData.experienceLevel,
+                        techstack: setupData.techStack || '',
+                        amount: setupData.duration,
+                        userid: userId,
+                        duration: `${setupData.duration} questions`,
+                        completed: true // Mark as completed since interview is done
+                    }),
+                });
+
+                const result = await response.json();
+                console.log("Interview creation result:", result);
+
+                if (result.success && result.interviewId) {
+                    setCreatedInterviewId(result.interviewId);
+
+                    // Now create feedback for this interview
+                    await handleGenerateFeedback(messages, result.interviewId);
+                } else {
+                    console.error("Error creating interview:", result.error || result.message);
+                    router.push("/");
+                }
+            } catch (error) {
+                console.error("Error in createNewInterviewWithFeedback:", error);
                 router.push("/");
             }
         };
 
         if (callStatus === CallStatus.FINISHED) {
+            console.log("Call finished, processing results", {
+                type,
+                messageCount: messages.length,
+                hasSetupData: !!setupData,
+                interviewId,
+                createdInterviewId
+            });
+
             if (type === "generate") {
-                // Interview completed, redirect to home to see it in "Your Interviews"
-                router.push("/");
+                // For dynamically generated interviews
+                if (setupData && messages.length > 0) {
+                    createNewInterviewWithFeedback(messages, setupData);
+                } else if (messages.length === 0) {
+                    console.log("No conversation recorded, redirecting to home");
+                    router.push("/");
+                } else {
+                    console.log("Missing setup data, redirecting to home");
+                    router.push("/");
+                }
             } else {
-                handleGenerateFeedback(messages);
+                // For existing interviews (type === "interview")
+                if (messages.length > 0 && interviewId) {
+                    handleGenerateFeedback(messages, interviewId);
+                } else if (messages.length === 0) {
+                    console.log("No conversation recorded for existing interview");
+                    router.push("/");
+                } else {
+                    console.log("Missing interview ID for existing interview");
+                    router.push("/");
+                }
             }
         }
-    }, [messages, callStatus, feedbackId, interviewId, router, type, userId]);
+    }, [messages, callStatus, feedbackId, interviewId, router, type, userId, setupData, createdInterviewId]);
 
     const handleSetupComplete = (data: InterviewSetupData) => {
+        console.log("Interview setup completed:", data);
         setSetupData(data);
         setShowSetup(false);
     };
 
     const handleCall = async () => {
+        console.log("Starting call", { type, setupData, interviewId });
         setCallStatus(CallStatus.CONNECTING);
 
         if (type === "generate") {
-            if (!setupData) return;
+            if (!setupData) {
+                console.error("No setup data available for generated interview");
+                setCallStatus(CallStatus.INACTIVE);
+                return;
+            }
 
             // Create a complete assistant configuration with the form data
             const dynamicAssistant = {
@@ -229,16 +313,28 @@ MIXED INTERVIEW STRUCTURE:
 ${setupData.techStack ? `- Technical questions should focus on: ${setupData.techStack}` : ''}
 ` : ''}
 
-INTERVIEW GUIDELINES:
+CRITICAL INTERVIEW GUIDELINES:
 - Be professional yet warm and conversational
 ${setupData.companyName ? `- Occasionally reference ${setupData.companyName} in context where appropriate` : ''}
-- Ask one question at a time and wait for complete responses
+- Ask ONE question at a time and wait for complete responses
+- Keep your responses SHORT - maximum 2-3 sentences
 - Adjust question difficulty based on ${setupData.experienceLevel} experience level
-- Use follow-up questions if responses are unclear or incomplete
-- Keep responses concise (this is voice-based)
-- Acknowledge good answers positively
+- Use brief follow-up questions if responses are unclear: "Can you elaborate?" or "Tell me more"
+- Keep responses concise since this is voice-based
+- Give brief acknowledgments: "Good", "I see", "Great", "Understood"
 - Count your questions and stick to the ${setupData.duration} question limit
-- End gracefully after asking all questions
+- NEVER number your questions or say "Question 1", "Question 2", etc.
+- Ask questions naturally like a real interviewer would
+- End gracefully after asking all questions with: "Thank you for your time. We'll be in touch soon."
+
+RESPONSE EXAMPLES:
+✅ "Good. Tell me about your React experience."
+✅ "I see. What's your biggest professional challenge?"
+✅ "Great. How do you handle tight deadlines?"
+
+❌ "Question number 1: Tell me about..."
+❌ "Moving to our next question..."
+❌ "That's an interesting point, let me explain how that works..."
 
 Start the interview now with an appropriate first question based on the type and experience level selected.`
                         }
@@ -246,10 +342,16 @@ Start the interview now with an appropriate first question based on the type and
                 }
             };
 
-            console.log("Starting interview with setup:", setupData);
-            await vapi.start(dynamicAssistant);
+            console.log("Starting interview with dynamic assistant configuration");
+            try {
+                await vapi.start(dynamicAssistant);
+            } catch (error) {
+                console.error("Error starting dynamic interview:", error);
+                setCallStatus(CallStatus.INACTIVE);
+            }
 
         } else {
+            // Existing interview flow
             let formattedQuestions = "";
             if (questions) {
                 formattedQuestions = questions
@@ -257,15 +359,22 @@ Start the interview now with an appropriate first question based on the type and
                     .join("\n");
             }
 
-            await vapi.start(interviewer, {
-                variableValues: {
-                    questions: formattedQuestions,
-                },
-            });
+            console.log("Starting interview with predefined questions");
+            try {
+                await vapi.start(interviewer, {
+                    variableValues: {
+                        questions: formattedQuestions,
+                    },
+                });
+            } catch (error) {
+                console.error("Error starting predefined interview:", error);
+                setCallStatus(CallStatus.INACTIVE);
+            }
         }
     };
 
     const handleDisconnect = () => {
+        console.log("Disconnecting call");
         setCallStatus(CallStatus.FINISHED);
         vapi.stop();
     };
@@ -351,19 +460,23 @@ Start the interview now with an appropriate first question based on the type and
 
             <div className="w-full flex justify-center">
                 {callStatus !== "ACTIVE" ? (
-                    <button className="relative btn-call" onClick={() => handleCall()}>
-            <span
-                className={cn(
-                    "absolute animate-ping rounded-full opacity-75",
-                    callStatus !== "CONNECTING" && "hidden"
-                )}
-            />
+                    <button
+                        className="relative btn-call"
+                        onClick={() => handleCall()}
+                        disabled={callStatus === "CONNECTING"}
+                    >
+                        <span
+                            className={cn(
+                                "absolute animate-ping rounded-full opacity-75",
+                                callStatus !== "CONNECTING" && "hidden"
+                            )}
+                        />
 
                         <span className="relative">
-              {callStatus === "INACTIVE" || callStatus === "FINISHED"
-                  ? "Call"
-                  : ". . ."}
-            </span>
+                            {callStatus === "INACTIVE" || callStatus === "FINISHED"
+                                ? "Call"
+                                : ". . ."}
+                        </span>
                     </button>
                 ) : (
                     <button className="btn-disconnect" onClick={() => handleDisconnect()}>
@@ -371,6 +484,19 @@ Start the interview now with an appropriate first question based on the type and
                     </button>
                 )}
             </div>
+
+            {/* Debug info - remove in production */}
+            {process.env.NODE_ENV === 'development' && (
+                <div className="mt-4 p-4 bg-gray-800 rounded text-xs text-gray-300">
+                    <p>Debug Info:</p>
+                    <p>Type: {type}</p>
+                    <p>Call Status: {callStatus}</p>
+                    <p>Messages: {messages.length}</p>
+                    <p>Setup Data: {setupData ? 'Yes' : 'No'}</p>
+                    <p>Interview ID: {interviewId || 'None'}</p>
+                    <p>Created Interview ID: {createdInterviewId || 'None'}</p>
+                </div>
+            )}
         </>
     );
 };
