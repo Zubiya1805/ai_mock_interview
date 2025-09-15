@@ -97,12 +97,13 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                         <select
                             value={interviewType}
                             onChange={(e) => handleInterviewTypeChange(e.target.value)}
-                            className="w-full bg-dark-300 rounded-full min-h-12 px-5 text-light-100 border border-input focus:border-primary-200 focus:outline-none appearance-none cursor-pointer"
+                            className="w-full bg-dark-300 rounded-full min-h-12 px-5 text-light-100 text-lg font-medium border border-input focus:border-primary-200 focus:outline-none appearance-none cursor-pointer"
+                            style={{ fontSize: '18px', lineHeight: '1.5' }}
                         >
-                            <option value="">Select interview type</option>
-                            <option value="Technical">Technical</option>
-                            <option value="Behavioral">Behavioral</option>
-                            <option value="Mixed">Mixed (Technical + Behavioral)</option>
+                            <option value="" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Select interview type</option>
+                            <option value="Technical" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Technical</option>
+                            <option value="Behavioral" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Behavioral</option>
+                            <option value="Mixed" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Mixed (Technical + Behavioral)</option>
                         </select>
                         <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
                             <svg className="w-4 h-4 text-light-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,7 +120,8 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                         value={role}
                         onChange={(e) => setRole(e.target.value)}
                         placeholder="e.g., Frontend Developer, Product Manager"
-                        className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200"
+                        className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200 text-lg"
+                        style={{ fontSize: '18px' }}
                     />
                 </div>
 
@@ -130,12 +132,13 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                         <select
                             value={experienceLevel}
                             onChange={(e) => setExperienceLevel(e.target.value)}
-                            className="w-full bg-dark-300 rounded-full min-h-12 px-5 text-light-100 border border-input focus:border-primary-200 focus:outline-none appearance-none cursor-pointer"
+                            className="w-full bg-dark-300 rounded-full min-h-12 px-5 text-light-100 text-lg font-medium border border-input focus:border-primary-200 focus:outline-none appearance-none cursor-pointer"
+                            style={{ fontSize: '18px', lineHeight: '1.5' }}
                         >
-                            <option value="">Select experience level</option>
-                            <option value="Entry Level">Entry Level</option>
-                            <option value="Middle">Middle</option>
-                            <option value="Senior">Senior</option>
+                            <option value="" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Select experience level</option>
+                            <option value="Entry Level" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Entry Level</option>
+                            <option value="Middle" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Middle</option>
+                            <option value="Senior" className="bg-dark-300 text-light-100 py-3 px-4" style={{ fontSize: '20px', padding: '16px 20px', fontWeight: '500' }}>Senior</option>
                         </select>
                         <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
                             <svg className="w-4 h-4 text-light-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,7 +157,8 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}
                         placeholder="e.g., Google, Microsoft, Meta"
-                        className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200"
+                        className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200 text-lg"
+                        style={{ fontSize: '18px' }}
                     />
                 </div>
 
@@ -166,7 +170,8 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                             value={techStack}
                             onChange={(e) => setTechStack(e.target.value)}
                             placeholder="e.g., React, Node.js, Python, MongoDB"
-                            className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200"
+                            className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200 text-lg"
+                            style={{ fontSize: '18px' }}
                         />
                     </div>
                 )}
@@ -181,7 +186,8 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                         placeholder="e.g., 5"
                         min="1"
                         max="20"
-                        className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200"
+                        className="bg-dark-300 rounded-full min-h-12 px-5 placeholder:text-light-400 border border-input focus:border-primary-200 text-lg"
+                        style={{ fontSize: '18px' }}
                     />
                 </div>
 
@@ -203,7 +209,7 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                             <svg className="w-5 h-5 text-primary-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
-                            <span className="text-primary-200">
+                            <span className="text-primary-200 text-base">
                 {resumeFile ? resumeFile.name : "Upload an image"}
               </span>
                         </label>
@@ -214,7 +220,7 @@ const InterviewSetup = ({ userName, userId, onStartInterview }: InterviewSetupPr
                 <Button
                     onClick={handleStartInterview}
                     disabled={!isFormValid}
-                    className="w-full bg-primary-200 text-dark-100 hover:bg-primary-200/80 rounded-full min-h-12 font-bold px-5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-primary-200 text-dark-100 hover:bg-primary-200/80 rounded-full min-h-12 font-bold px-5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-base"
                 >
                     Start Interview
                 </Button>

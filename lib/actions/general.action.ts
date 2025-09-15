@@ -2,9 +2,18 @@
 
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
-
 import { db } from "@/firebase/admin";
 import { z } from "zod";
+
+// Import types
+import {
+    CreateFeedbackParams,
+    CreateInterviewParams,
+    GetFeedbackByInterviewIdParams,
+    GetLatestInterviewsParams,
+    Interview,
+    Feedback
+} from "@/lib/types";
 
 const feedbackSchema = z.object({
     totalScore: z.number().min(0).max(100),
@@ -15,9 +24,9 @@ const feedbackSchema = z.object({
         culturalFit: z.number().min(0).max(100),
         confidenceAndClarity: z.number().min(0).max(100),
     }),
-    strengths: z.string().min(1),
-    areasForImprovement: z.string().min(1),
-    finalAssessment: z.string().min(1),
+    strengths: z.string(),
+    areasForImprovement: z.string(),
+    finalAssessment: z.string(),
 });
 
 export async function createFeedback(params: CreateFeedbackParams) {
@@ -25,13 +34,8 @@ export async function createFeedback(params: CreateFeedbackParams) {
 
     try {
         const formattedTranscript = transcript
-            .map(
-                (sentence: { role: string; content: string }) =>
-                    `- ${sentence.role}: ${sentence.content}\n`
-            )
+            .map((sentence: { role: string; content: string }) => `- ${sentence.role}: ${sentence.content}\n`)
             .join("");
-
-        console.log("Formatted transcript:", formattedTranscript); // Debug log
 
         const { object } = await generateObject({
             model: google("gemini-2.0-flash-001", {
@@ -39,49 +43,29 @@ export async function createFeedback(params: CreateFeedbackParams) {
             }),
             schema: feedbackSchema,
             prompt: `
-You are an AI interviewer analyzing a mock interview for a Data Scientist position. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out clearly.
+        You are an AI interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out.
+        Transcript:
+        ${formattedTranscript}
 
-Interview Transcript:
-${formattedTranscript}
-
-IMPORTANT INSTRUCTIONS:
-1. You MUST provide specific, detailed feedback for each category
-2. Strengths should be concrete examples from the interview (minimum 2-3 sentences)
-3. Areas for improvement should be specific and actionable (minimum 2-3 sentences)
-4. Final assessment should be comprehensive (minimum 3-4 sentences)
-5. Do NOT leave any field empty or with generic responses
-
-Please score the candidate from 0 to 100 in the following areas:
-- **Communication Skills**: Clarity, articulation, structured responses, ability to explain technical concepts clearly
-- **Technical Knowledge**: Understanding of data science concepts, tools, methodologies, statistical knowledge
-- **Problem-Solving**: Ability to analyze problems, propose solutions, think through complex scenarios
-- **Cultural & Role Fit**: Alignment with company values, understanding of the role, professional demeanor
-- **Confidence & Clarity**: Confidence in responses, engagement level, clarity of thought process
-
-Provide specific examples from the transcript to support your scores and feedback.
-            `,
-            system: `You are a professional interviewer with expertise in Data Science roles. You must provide detailed, specific feedback based on the interview transcript. Never provide empty or generic responses. Always reference specific parts of the conversation when giving feedback.`
+        Please score the candidate from 0 to 100 in the following areas. Do not add categories other than the ones provided:
+        - **Communication Skills**: Clarity, articulation, structured responses.
+        - **Technical Knowledge**: Understanding of key concepts for the role.
+        - **Problem-Solving**: Ability to analyze problems and propose solutions.
+        - **Cultural & Role Fit**: Alignment with company values and job role.
+        - **Confidence & Clarity**: Confidence in responses, engagement, and clarity.
+        `,
+            system:
+                "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
         });
-
-        console.log("Generated feedback object:", object); // Debug log
-
-        // Validate that we have meaningful content
-        if (!object.strengths || object.strengths.trim().length < 10) {
-            console.warn("Strengths field is too short or empty:", object.strengths);
-        }
-
-        if (!object.areasForImprovement || object.areasForImprovement.trim().length < 10) {
-            console.warn("Areas for improvement field is too short or empty:", object.areasForImprovement);
-        }
 
         const feedback = {
             interviewId: interviewId,
             userId: userId,
             totalScore: object.totalScore,
             categoryScores: object.categoryScores,
-            strengths: object.strengths || "Unable to identify specific strengths from the interview. Please ensure the interview covers relevant topics and provides detailed responses.",
-            areasForImprovement: object.areasForImprovement || "Unable to identify specific areas for improvement. Please ensure the interview is comprehensive and covers technical and behavioral aspects.",
-            finalAssessment: object.finalAssessment || "Unable to provide a comprehensive assessment based on the available interview data.",
+            strengths: object.strengths,
+            areasForImprovement: object.areasForImprovement,
+            finalAssessment: object.finalAssessment,
             createdAt: new Date().toISOString(),
         };
 
@@ -95,19 +79,64 @@ Provide specific examples from the transcript to support your scores and feedbac
 
         await feedbackRef.set(feedback);
 
-        console.log("Feedback saved successfully:", feedback); // Debug log
-
         return { success: true, feedbackId: feedbackRef.id };
     } catch (error) {
         console.error("Error saving feedback:", error);
-        return { success: false, error: error.message };
+        return { success: false };
+    }
+}
+
+export async function createInterview(params: CreateInterviewParams) {
+    const {
+        userId,
+        type,
+        role,
+        experienceLevel,
+        techstack,
+        companyName,
+        duration,
+        completed = false,
+        finalized = false
+    } = params;
+
+    try {
+        const interview = {
+            userId,
+            type,
+            role,
+            experienceLevel,
+            techstack,
+            companyName,
+            duration,
+            completed,
+            finalized,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+
+        const interviewRef = db.collection("interviews").doc();
+        await interviewRef.set(interview);
+
+        return { success: true, interviewId: interviewRef.id };
+    } catch (error: any) {
+        console.error("Error creating interview:", error);
+        return { success: false, error: error?.message || "Unknown error" };
     }
 }
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
-    const interview = await db.collection("interviews").doc(id).get();
+    try {
+        const interview = await db.collection("interviews").doc(id).get();
 
-    return interview.data() as Interview | null;
+        if (!interview.exists) {
+            return null;
+        }
+
+        return { id: interview.id, ...interview.data() } as Interview;
+    } catch (error) {
+        console.error("Error fetching interview:", error);
+        return null;
+    }
 }
 
 export async function getFeedbackByInterviewId(
@@ -120,17 +149,22 @@ export async function getFeedbackByInterviewId(
         return null;
     }
 
-    const querySnapshot = await db
-        .collection("feedback")
-        .where("interviewId", "==", interviewId)
-        .where("userId", "==", userId)
-        .limit(1)
-        .get();
+    try {
+        const querySnapshot = await db
+            .collection("feedback")
+            .where("interviewId", "==", interviewId)
+            .where("userId", "==", userId)
+            .limit(1)
+            .get();
 
-    if (querySnapshot.empty) return null;
+        if (querySnapshot.empty) return null;
 
-    const feedbackDoc = querySnapshot.docs[0];
-    return { id: feedbackDoc.id, ...feedbackDoc.data() } as Feedback;
+        const feedbackDoc = querySnapshot.docs[0];
+        return { id: feedbackDoc.id, ...feedbackDoc.data() } as Feedback;
+    } catch (error) {
+        console.error("Error fetching feedback:", error);
+        return null;
+    }
 }
 
 export async function getLatestInterviews(
@@ -143,18 +177,23 @@ export async function getLatestInterviews(
         return [];
     }
 
-    const interviews = await db
-        .collection("interviews")
-        .orderBy("createdAt", "desc")
-        .where("finalized", "==", true)
-        .where("userId", "!=", userId)
-        .limit(limit)
-        .get();
+    try {
+        const interviews = await db
+            .collection("interviews")
+            .orderBy("createdAt", "desc")
+            .where("finalized", "==", true)
+            .where("userId", "!=", userId)
+            .limit(limit)
+            .get();
 
-    return interviews.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-    })) as Interview[];
+        return interviews.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        })) as Interview[];
+    } catch (error) {
+        console.error("Error fetching latest interviews:", error);
+        return [];
+    }
 }
 
 export async function getInterviewsByUserId(
@@ -165,14 +204,20 @@ export async function getInterviewsByUserId(
         return [];
     }
 
-    const interviews = await db
-        .collection("interviews")
-        .where("userId", "==", userId)
-        .orderBy("createdAt", "desc")
-        .get();
+    try {
+        const interviews = await db
+            .collection("interviews")
+            .where("userId", "==", userId)
+            .where("completed", "==", true)
+            .orderBy("createdAt", "desc")
+            .get();
 
-    return interviews.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-    })) as Interview[];
+        return interviews.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        })) as Interview[];
+    } catch (error) {
+        console.error("Error fetching user interviews:", error);
+        return [];
+    }
 }

@@ -22,19 +22,39 @@ const checkIconExists = async (url: string) => {
   }
 };
 
-export const getTechLogos = async (techArray: string[]) => {
-  const logoURLs = techArray.map((tech) => {
+export const getTechLogos = async (techArray: string[] | string | null | undefined) => {
+  // Convert techArray to a proper array if it's not already
+  let techList: string[] = [];
+
+  if (Array.isArray(techArray)) {
+    techList = techArray;
+  } else if (typeof techArray === 'string') {
+    // Handle case where techstack is stored as a comma-separated string
+    techList = techArray.split(',').map(tech => tech.trim()).filter(tech => tech.length > 0);
+  } else {
+    // Handle null, undefined, or other invalid types
+    return [];
+  }
+
+  // Filter out empty strings and ensure we have valid tech names
+  const validTechList = techList.filter(tech => tech && typeof tech === 'string' && tech.trim().length > 0);
+
+  if (validTechList.length === 0) {
+    return [];
+  }
+
+  const logoURLs = validTechList.map((tech) => {
     const normalized = normalizeTechName(tech);
     return {
-      tech,
-      url: `${techIconBaseURL}/${normalized}/${normalized}-original.svg`,
+      tech: tech.trim(),
+      url: normalized ? `${techIconBaseURL}/${normalized}/${normalized}-original.svg` : "/tech.svg",
     };
   });
 
   const results = await Promise.all(
       logoURLs.map(async ({ tech, url }) => ({
         tech,
-        url: (await checkIconExists(url)) ? url : "/tech.svg",
+        url: url !== "/tech.svg" && (await checkIconExists(url)) ? url : "/tech.svg",
       }))
   );
 
