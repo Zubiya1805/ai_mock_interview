@@ -22,6 +22,14 @@ const Feedback = async ({ params }: RouteParams) => {
         userId: user?.id!,
     });
 
+    // Helper function to format category names
+    const formatCategoryName = (key: string) => {
+        return key
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^./, str => str.toUpperCase())
+            .trim();
+    };
+
     return (
         <section className="section-feedback">
             <div className="flex flex-row justify-center">
@@ -39,9 +47,9 @@ const Feedback = async ({ params }: RouteParams) => {
                         <p>
                             Overall Impression:{" "}
                             <span className="text-primary-200 font-bold">
-                {feedback?.totalScore}
-              </span>
-                            /100
+                                {feedback?.totalScore || "N/A"}
+                            </span>
+                            {feedback?.totalScore && "/100"}
                         </p>
                     </div>
 
@@ -59,37 +67,48 @@ const Feedback = async ({ params }: RouteParams) => {
 
             <hr />
 
-            <p>{feedback?.finalAssessment}</p>
+            <p>{feedback?.finalAssessment || "No assessment available yet."}</p>
 
             {/* Interview Breakdown */}
             <div className="flex flex-col gap-4">
                 <h2>Breakdown of the Interview:</h2>
-                {feedback?.categoryScores?.map((category, index) => (
-                    <div key={index}>
-                        <p className="font-bold">
-                            {index + 1}. {category.name} ({category.score}/100)
-                        </p>
-                        <p>{category.comment}</p>
-                    </div>
-                ))}
+                {feedback?.categoryScores && typeof feedback.categoryScores === 'object'
+                    ? Object.entries(feedback.categoryScores).map(([key, score], index) => (
+                        <div key={key} className="mb-3">
+                            <p className="font-bold">
+                                {index + 1}. {formatCategoryName(key)}: {score}/100
+                            </p>
+                            {/* Progress bar */}
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                                <div
+                                    className="bg-primary-200 h-2.5 rounded-full"
+                                    style={{ width: `${score}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    ))
+                    : <p>No category breakdown available yet.</p>
+                }
             </div>
 
             <div className="flex flex-col gap-3">
                 <h3>Strengths</h3>
-                <ul>
-                    {feedback?.strengths?.map((strength, index) => (
-                        <li key={index}>{strength}</li>
-                    ))}
-                </ul>
+                {feedback?.strengths && feedback.strengths.trim().length > 0
+                    ? <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400">
+                        <p className="text-green-800">{feedback.strengths}</p>
+                    </div>
+                    : <p>No strengths identified yet.</p>
+                }
             </div>
 
             <div className="flex flex-col gap-3">
                 <h3>Areas for Improvement</h3>
-                <ul>
-                    {feedback?.areasForImprovement?.map((area, index) => (
-                        <li key={index}>{area}</li>
-                    ))}
-                </ul>
+                {feedback?.areasForImprovement && feedback.areasForImprovement.trim().length > 0
+                    ? <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-400">
+                        <p className="text-yellow-800">{feedback.areasForImprovement}</p>
+                    </div>
+                    : <p>No improvement areas identified yet.</p>
+                }
             </div>
 
             <div className="buttons">

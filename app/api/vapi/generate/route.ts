@@ -5,47 +5,141 @@ import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
 
 export async function POST(request: Request) {
-    const { type, role, level, techstack, amount, userid } = await request.json();
+    const {
+        type,
+        role,
+        level = "Mid-level",
+        techstack = "",
+        amount = "5",
+        userid,
+        duration = "15 minutes"
+    } = await request.json();
 
     try {
+        // Create different prompts based on interview type
+        let prompt = "";
+
+        if (type === "Technical") {
+            prompt = `Generate ${amount} technical interview questions for a ${role} position.
+            Focus Areas: ${techstack || "general technical skills for the role"}
+            Experience Level: ${level}
+            Duration: ${duration}
+            
+            Focus on:
+            - Technical knowledge and implementation
+            - Problem-solving scenarios
+            - Code review and debugging
+            - System design (if senior level)
+            ${techstack ? `- Specific questions about ${techstack}` : ''}
+            
+            Make questions progressively challenging and include follow-up scenarios.`;
+
+        } else if (type === "Behavioral") {
+            prompt = `Generate ${amount} behavioral interview questions for a ${role} position.
+            Experience Level: ${level}
+            Duration: ${duration}
+            
+            Focus on:
+            - Past experiences and challenges
+            - Leadership and teamwork
+            - Problem-solving approach
+            - Communication skills
+            - Career motivation and goals
+            
+            Use STAR method friendly questions (Situation, Task, Action, Result).
+            Include questions specific to ${role} responsibilities.`;
+
+        } else if (type === "Mixed") {
+            const technicalCount = Math.ceil(parseInt(amount) * 0.6);
+            const behavioralCount = parseInt(amount) - technicalCount;
+
+            prompt = `Generate a mixed interview with ${technicalCount} technical and ${behavioralCount} behavioral questions for a ${role} position.
+            
+            Technical Focus: ${techstack || "general technical skills"}
+            Experience Level: ${level}
+            Duration: ${duration}
+            
+            Technical Questions (${technicalCount}):
+            - Technical knowledge and problem-solving
+            - Implementation and best practices
+            ${techstack ? `- Specific to ${techstack}` : ''}
+            
+            Behavioral Questions (${behavioralCount}):
+            - Past experiences and teamwork
+            - Leadership and communication
+            - Problem-solving approach
+            
+            Mix the questions naturally, starting with behavioral to build rapport, then technical challenges.`;
+        }
+
+        prompt += `
+
+        IMPORTANT: Return questions as a valid JSON array format like this:
+        ["Question 1?", "Question 2?", "Question 3?"]
+        
+        - Do not use special characters like /, *, #, or any markdown formatting
+        - Make questions conversational and suitable for voice interaction
+        - Ensure each question is clear and specific
+        - No additional text or explanations, just the JSON array`;
+
         const { text: questions } = await generateText({
             model: google("gemini-2.0-flash-001"),
-            prompt: `Prepare questions for a job interview.
-        The job role is ${role}.
-        The job experience level is ${level}.
-        The tech stack used in the job is: ${techstack}.
-        The focus between behavioural and technical questions should lean towards: ${type}.
-        The amount of questions required is: ${amount}.
-        Please return only the questions, without any additional text.
-        The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
-        Return the questions formatted like this:
-        ["Question 1", "Question 2", "Question 3"]
-        
-        Thank you! <3
-    `,
+            prompt: prompt,
         });
+
+        // Clean and parse the response
+        let cleanedQuestions;
+        try {
+            // Remove any markdown formatting and extract JSON
+            const jsonMatch = questions.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                cleanedQuestions = JSON.parse(jsonMatch[0]);
+            } else {
+                cleanedQuestions = JSON.parse(questions);
+            }
+        } catch (parseError) {
+            console.error("Error parsing questions:", parseError);
+            // Fallback: create default questions
+            cleanedQuestions = [
+                `Tell me about your experience with ${role} responsibilities.`,
+                `How do you approach problem-solving in your work?`,
+                `Describe a challenging project you worked on recently.`,
+                `What interests you most about this ${role} position?`,
+                `How do you stay updated with industry trends?`
+            ];
+        }
 
         const interview = {
             role: role,
             type: type,
             level: level,
-            techstack: techstack.split(","),
-            questions: JSON.parse(questions),
+            techstack: techstack ? techstack.split(",").map(tech => tech.trim()) : [],
+            questions: cleanedQuestions,
             userId: userid,
-            finalized: true,
+            finalized: true, // Mark as finalized so it shows in the interviews list
             coverImage: getRandomInterviewCover(),
             createdAt: new Date().toISOString(),
+            questionCount: questioncount || amount,
         };
 
-        await db.collection("interviews").add(interview);
+        const docRef = await db.collection("interviews").add(interview);
 
-        return Response.json({ success: true }, { status: 200 });
+        return Response.json({
+            success: true,
+            interviewId: docRef.id,
+            message: "Interview created successfully"
+        }, { status: 200 });
+
     } catch (error) {
-        console.error("Error:", error);
-        return Response.json({ success: false, error: error }, { status: 500 });
+        console.error("Error creating interview:", error);
+        return Response.json({
+            success: false,
+            error: "Failed to create interview",
+            message: error instanceof Error ? error.message : "Unknown error"
+        }, { status: 500 });
     }
 }
 
 export async function GET() {
-    return Response.json({ success: true, data: "Thank you!" }, { status: 200 });
+    return Response.json({ success: true, data: "Interview API is working!" }, { status: 200 });
 }

@@ -136,7 +136,7 @@ Be professional, yet warm and welcoming:
 Use official yet friendly language.
 Keep responses concise and to the point (like in a real voice interview).
 Avoid robotic phrasing—sound natural and conversational.
-Answer the candidate’s questions professionally:
+Answer the candidate's questions professionally:
 
 If asked about the role, company, or expectations, provide a clear and relevant answer.
 If unsure, redirect the candidate to HR for more details.
@@ -150,6 +150,64 @@ End the conversation on a polite and positive note.
 - Be sure to be professional and polite.
 - Keep all your responses short and simple. Use official language, but be kind and welcoming.
 - This is a voice conversation, so keep your responses short, like in a real conversation. Don't ramble for too long.`,
+      },
+    ],
+  },
+};
+
+// Enhanced interviewer for dynamic interviews
+export const dynamicInterviewer: CreateAssistantDTO = {
+  name: "Dynamic Interviewer",
+  firstMessage:
+      "Hello {{username}}! Thank you for taking the time to speak with me today. I'm excited to learn more about you and discuss the {{role}} position. Are you ready to begin?",
+  transcriber: {
+    provider: "deepgram",
+    model: "nova-2",
+    language: "en",
+  },
+  voice: {
+    provider: "11labs",
+    voiceId: "sarah",
+    stability: 0.4,
+    similarityBoost: 0.8,
+    speed: 0.9,
+    style: 0.5,
+    useSpeakerBoost: true,
+  },
+  model: {
+    provider: "openai",
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: `You are conducting a {{interviewtype}} interview for a {{role}} position.
+
+INTERVIEW CONTEXT:
+- Candidate Name: {{username}}
+- Position: {{role}}
+- Interview Type: {{interviewtype}}
+- Tech Stack Focus: {{techstack}}
+- Duration: {{duration}}
+
+CUSTOM INTERVIEW GUIDANCE:
+{{customprompt}}
+
+GENERAL INTERVIEW PRINCIPLES:
+- Be professional yet warm and welcoming
+- Keep responses concise and conversational (this is voice-based)
+- Ask one question at a time and wait for complete responses
+- Use follow-up questions to dive deeper when responses are vague
+- Acknowledge good answers and provide encouragement
+- Maintain natural conversation flow
+- End the interview gracefully after the specified duration
+
+INTERVIEW STRUCTURE:
+1. Brief greeting and confirmation they're ready
+2. Ask 4-6 main questions based on the interview type
+3. Allow time for candidate questions
+4. Professional closing
+
+Remember: This is a voice conversation, so keep your responses short and natural. Don't read questions like a script - make it conversational.`,
       },
     ],
   },

@@ -15,9 +15,9 @@ const feedbackSchema = z.object({
         culturalFit: z.number().min(0).max(100),
         confidenceAndClarity: z.number().min(0).max(100),
     }),
-    strengths: z.string(),
-    areasForImprovement: z.string(),
-    finalAssessment: z.string(),
+    strengths: z.string().min(1),
+    areasForImprovement: z.string().min(1),
+    finalAssessment: z.string().min(1),
 });
 
 export async function createFeedback(params: CreateFeedbackParams) {
@@ -31,35 +31,57 @@ export async function createFeedback(params: CreateFeedbackParams) {
             )
             .join("");
 
+        console.log("Formatted transcript:", formattedTranscript); // Debug log
+
         const { object } = await generateObject({
             model: google("gemini-2.0-flash-001", {
                 structuredOutputs: false,
             }),
             schema: feedbackSchema,
             prompt: `
-        You are an AI interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out.
-        Transcript:
-        ${formattedTranscript}
+You are an AI interviewer analyzing a mock interview for a Data Scientist position. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out clearly.
 
-        Please score the candidate from 0 to 100 in the following areas. Do not add categories other than the ones provided:
-        - **Communication Skills**: Clarity, articulation, structured responses.
-        - **Technical Knowledge**: Understanding of key concepts for the role.
-        - **Problem-Solving**: Ability to analyze problems and propose solutions.
-        - **Cultural & Role Fit**: Alignment with company values and job role.
-        - **Confidence & Clarity**: Confidence in responses, engagement, and clarity.
-        `,
-            system:
-                "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
+Interview Transcript:
+${formattedTranscript}
+
+IMPORTANT INSTRUCTIONS:
+1. You MUST provide specific, detailed feedback for each category
+2. Strengths should be concrete examples from the interview (minimum 2-3 sentences)
+3. Areas for improvement should be specific and actionable (minimum 2-3 sentences)
+4. Final assessment should be comprehensive (minimum 3-4 sentences)
+5. Do NOT leave any field empty or with generic responses
+
+Please score the candidate from 0 to 100 in the following areas:
+- **Communication Skills**: Clarity, articulation, structured responses, ability to explain technical concepts clearly
+- **Technical Knowledge**: Understanding of data science concepts, tools, methodologies, statistical knowledge
+- **Problem-Solving**: Ability to analyze problems, propose solutions, think through complex scenarios
+- **Cultural & Role Fit**: Alignment with company values, understanding of the role, professional demeanor
+- **Confidence & Clarity**: Confidence in responses, engagement level, clarity of thought process
+
+Provide specific examples from the transcript to support your scores and feedback.
+            `,
+            system: `You are a professional interviewer with expertise in Data Science roles. You must provide detailed, specific feedback based on the interview transcript. Never provide empty or generic responses. Always reference specific parts of the conversation when giving feedback.`
         });
+
+        console.log("Generated feedback object:", object); // Debug log
+
+        // Validate that we have meaningful content
+        if (!object.strengths || object.strengths.trim().length < 10) {
+            console.warn("Strengths field is too short or empty:", object.strengths);
+        }
+
+        if (!object.areasForImprovement || object.areasForImprovement.trim().length < 10) {
+            console.warn("Areas for improvement field is too short or empty:", object.areasForImprovement);
+        }
 
         const feedback = {
             interviewId: interviewId,
             userId: userId,
             totalScore: object.totalScore,
             categoryScores: object.categoryScores,
-            strengths: object.strengths,
-            areasForImprovement: object.areasForImprovement,
-            finalAssessment: object.finalAssessment,
+            strengths: object.strengths || "Unable to identify specific strengths from the interview. Please ensure the interview covers relevant topics and provides detailed responses.",
+            areasForImprovement: object.areasForImprovement || "Unable to identify specific areas for improvement. Please ensure the interview is comprehensive and covers technical and behavioral aspects.",
+            finalAssessment: object.finalAssessment || "Unable to provide a comprehensive assessment based on the available interview data.",
             createdAt: new Date().toISOString(),
         };
 
@@ -73,10 +95,12 @@ export async function createFeedback(params: CreateFeedbackParams) {
 
         await feedbackRef.set(feedback);
 
+        console.log("Feedback saved successfully:", feedback); // Debug log
+
         return { success: true, feedbackId: feedbackRef.id };
     } catch (error) {
         console.error("Error saving feedback:", error);
-        return { success: false };
+        return { success: false, error: error.message };
     }
 }
 
