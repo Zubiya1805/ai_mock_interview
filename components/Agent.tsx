@@ -48,7 +48,7 @@ const Agent = ({
     const [lastMessage, setLastMessage] = useState<string>("");
     const [showSetup, setShowSetup] = useState(type === "generate");
     const [setupData, setSetupData] = useState<InterviewSetupData | null>(null);
-    const [createdInterviewId, setCreatedInterviewId] = useState<string | null>(null);
+    const [isProcessingComplete, setIsProcessingComplete] = useState(false);
 
     useEffect(() => {
         const onCallStart = () => {
@@ -132,11 +132,16 @@ const Agent = ({
             }
         };
 
-        const createNewInterviewWithFeedback = async (messages: SavedMessage[], setupData: InterviewSetupData) => {
-            console.log("Creating new interview with feedback", { setupData, messageCount: messages.length });
+        const createInterviewFromSession = async (messages: SavedMessage[], setupData: InterviewSetupData) => {
+            console.log("Creating interview record from completed session");
 
             try {
-                // First create the interview record
+                // Extract questions from the conversation (AI interviewer's questions)
+                const interviewerQuestions = messages
+                    .filter(msg => msg.role === "assistant" && msg.content.includes("?"))
+                    .map(msg => msg.content)
+                    .slice(0, parseInt(setupData.duration)); // Limit to requested number of questions
+
                 const response = await fetch('/api/vapi/generate', {
                     method: 'POST',
                     headers: {
@@ -150,7 +155,12 @@ const Agent = ({
                         amount: setupData.duration,
                         userid: userId,
                         duration: `${setupData.duration} questions`,
-                        completed: true // Mark as completed since interview is done
+                        // Pass the actual questions that were asked
+                        actualQuestions: interviewerQuestions.length > 0 ? interviewerQuestions : undefined,
+                        // Mark as completed since the interview session is done
+                        isCompleted: true,
+                        // Add unique session ID to prevent duplicates
+                        sessionId: `${userId}-${Date.now()}-${setupData.role}-${setupData.interviewType}`
                     }),
                 });
 
@@ -158,8 +168,6 @@ const Agent = ({
                 console.log("Interview creation result:", result);
 
                 if (result.success && result.interviewId) {
-                    setCreatedInterviewId(result.interviewId);
-
                     // Now create feedback for this interview
                     await handleGenerateFeedback(messages, result.interviewId);
                 } else {
@@ -167,45 +175,40 @@ const Agent = ({
                     router.push("/");
                 }
             } catch (error) {
-                console.error("Error in createNewInterviewWithFeedback:", error);
+                console.error("Error in createInterviewFromSession:", error);
                 router.push("/");
             }
         };
 
-        if (callStatus === CallStatus.FINISHED) {
+        if (callStatus === CallStatus.FINISHED && !isProcessingComplete) {
+            setIsProcessingComplete(true); // Prevent multiple executions
+
             console.log("Call finished, processing results", {
                 type,
                 messageCount: messages.length,
                 hasSetupData: !!setupData,
-                interviewId,
-                createdInterviewId
+                interviewId
             });
 
             if (type === "generate") {
-                // For dynamically generated interviews
+                // For dynamically generated interviews, create interview record then feedback
                 if (setupData && messages.length > 0) {
-                    createNewInterviewWithFeedback(messages, setupData);
-                } else if (messages.length === 0) {
-                    console.log("No conversation recorded, redirecting to home");
-                    router.push("/");
+                    createInterviewFromSession(messages, setupData);
                 } else {
-                    console.log("Missing setup data, redirecting to home");
+                    console.log("No conversation recorded or missing setup data");
                     router.push("/");
                 }
             } else {
-                // For existing interviews (type === "interview")
+                // For existing interviews (type === "interview"), just generate feedback
                 if (messages.length > 0 && interviewId) {
                     handleGenerateFeedback(messages, interviewId);
-                } else if (messages.length === 0) {
-                    console.log("No conversation recorded for existing interview");
-                    router.push("/");
                 } else {
-                    console.log("Missing interview ID for existing interview");
+                    console.log("No conversation recorded or missing interview ID");
                     router.push("/");
                 }
             }
         }
-    }, [messages, callStatus, feedbackId, interviewId, router, type, userId, setupData, createdInterviewId]);
+    }, [messages, callStatus, feedbackId, interviewId, router, type, userId, setupData, isProcessingComplete]);
 
     const handleSetupComplete = (data: InterviewSetupData) => {
         console.log("Interview setup completed:", data);
@@ -216,6 +219,7 @@ const Agent = ({
     const handleCall = async () => {
         console.log("Starting call", { type, setupData, interviewId });
         setCallStatus(CallStatus.CONNECTING);
+        setIsProcessingComplete(false); // Reset the processing flag
 
         if (type === "generate") {
             if (!setupData) {
@@ -259,84 +263,36 @@ ${setupData.companyName ? `- Company: ${setupData.companyName}` : ''}
 - Questions to Ask: ${setupData.duration} questions
 ${setupData.techStack ? `- Tech Stack Focus: ${setupData.techStack}` : ''}
 
-EXPERIENCE LEVEL CONTEXT:
-${setupData.experienceLevel === 'Entry Level' ? `
-- Ask foundational questions appropriate for someone new to the field
-- Focus on basic concepts, learning ability, and potential
-- Be encouraging and educational in your approach
-- Ask about academic projects, internships, or personal projects
-` : ''}
-${setupData.experienceLevel === 'Middle' ? `
-- Ask intermediate-level questions with some complexity
-- Focus on practical experience and problem-solving
-- Include scenario-based questions about real-world challenges
-- Ask about team collaboration and project ownership
-` : ''}
-${setupData.experienceLevel === 'Senior' ? `
-- Ask advanced technical and leadership questions
-- Focus on architecture, mentoring, and strategic thinking
-- Include system design and complex problem-solving scenarios
-- Ask about leading teams and making technical decisions
-` : ''}
-
-INTERVIEW STRUCTURE:
-You need to ask exactly ${setupData.duration} ${setupData.interviewType.toLowerCase()} questions appropriate for a ${setupData.experienceLevel} ${setupData.role}.
+CRITICAL INTERVIEW GUIDELINES:
+- Ask exactly ${setupData.duration} questions, no more, no less
+- Ask ONE question at a time and wait for complete responses
+- Keep your responses SHORT - maximum 2-3 sentences
+- Give brief acknowledgments: "Good", "I see", "Great", "Understood"
+- Ask questions naturally like a real interviewer would
+- NEVER number your questions or say "Question 1", "Question 2", etc.
+- End gracefully after asking all ${setupData.duration} questions with: "Thank you for your time. We'll be in touch soon."
 
 ${setupData.interviewType === 'Technical' ? `
-TECHNICAL INTERVIEW FOCUS:
-- Ask ${setupData.duration} technical questions about ${setupData.role} responsibilities
-- Tailor difficulty to ${setupData.experienceLevel} level
-${setupData.techStack ? `- Focus specifically on: ${setupData.techStack}` : ''}
-- Include coding concepts, problem-solving scenarios
-${setupData.experienceLevel === 'Senior' ? '- Ask about system design and architectural decisions' : ''}
-- Test their technical knowledge depth appropriate for their level
+TECHNICAL FOCUS:
+- Ask ${setupData.duration} technical questions about ${setupData.role}
+${setupData.techStack ? `- Focus on: ${setupData.techStack}` : ''}
+- Adjust difficulty for ${setupData.experienceLevel} level
 ` : ''}
 
 ${setupData.interviewType === 'Behavioral' ? `
-BEHAVIORAL INTERVIEW FOCUS:
+BEHAVIORAL FOCUS:
 - Ask ${setupData.duration} behavioral questions using STAR method
-- Tailor complexity to ${setupData.experienceLevel} level
-- Focus on experiences appropriate for their career stage
-${setupData.experienceLevel === 'Entry Level' ? '- Ask about academic, internship, or personal project experiences' : ''}
-${setupData.experienceLevel === 'Senior' ? '- Ask about leadership, mentoring, and strategic decision-making' : ''}
-- Explore their communication and problem-solving skills
-- Ask about career goals and motivations
+- Focus on experiences appropriate for ${setupData.experienceLevel} level
 ` : ''}
 
 ${setupData.interviewType === 'Mixed' ? `
-MIXED INTERVIEW STRUCTURE:
+MIXED INTERVIEW:
 - Ask ${Math.ceil(parseInt(setupData.duration) * 0.6)} technical questions
 - Ask ${Math.floor(parseInt(setupData.duration) * 0.4)} behavioral questions
-- Start with 1-2 behavioral questions to build rapport
-- Then move to technical challenges
-- All questions should be appropriate for ${setupData.experienceLevel} level
-${setupData.techStack ? `- Technical questions should focus on: ${setupData.techStack}` : ''}
+- Start with behavioral, then technical
 ` : ''}
 
-CRITICAL INTERVIEW GUIDELINES:
-- Be professional yet warm and conversational
-${setupData.companyName ? `- Occasionally reference ${setupData.companyName} in context where appropriate` : ''}
-- Ask ONE question at a time and wait for complete responses
-- Keep your responses SHORT - maximum 2-3 sentences
-- Adjust question difficulty based on ${setupData.experienceLevel} experience level
-- Use brief follow-up questions if responses are unclear: "Can you elaborate?" or "Tell me more"
-- Keep responses concise since this is voice-based
-- Give brief acknowledgments: "Good", "I see", "Great", "Understood"
-- Count your questions and stick to the ${setupData.duration} question limit
-- NEVER number your questions or say "Question 1", "Question 2", etc.
-- Ask questions naturally like a real interviewer would
-- End gracefully after asking all questions with: "Thank you for your time. We'll be in touch soon."
-
-RESPONSE EXAMPLES:
-✅ "Good. Tell me about your React experience."
-✅ "I see. What's your biggest professional challenge?"
-✅ "Great. How do you handle tight deadlines?"
-
-❌ "Question number 1: Tell me about..."
-❌ "Moving to our next question..."
-❌ "That's an interesting point, let me explain how that works..."
-
-Start the interview now with an appropriate first question based on the type and experience level selected.`
+Start the interview now with an appropriate first question.`
                         }
                     ]
                 }
@@ -484,19 +440,6 @@ Start the interview now with an appropriate first question based on the type and
                     </button>
                 )}
             </div>
-
-            {/* Debug info - remove in production */}
-            {process.env.NODE_ENV === 'development' && (
-                <div className="mt-4 p-4 bg-gray-800 rounded text-xs text-gray-300">
-                    <p>Debug Info:</p>
-                    <p>Type: {type}</p>
-                    <p>Call Status: {callStatus}</p>
-                    <p>Messages: {messages.length}</p>
-                    <p>Setup Data: {setupData ? 'Yes' : 'No'}</p>
-                    <p>Interview ID: {interviewId || 'None'}</p>
-                    <p>Created Interview ID: {createdInterviewId || 'None'}</p>
-                </div>
-            )}
         </>
     );
 };
