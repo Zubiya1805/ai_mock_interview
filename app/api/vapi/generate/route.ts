@@ -1,6 +1,5 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
-
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
 
@@ -48,6 +47,35 @@ export async function POST(request: Request) {
                 success: false,
                 error: "User ID is required"
             }, { status: 400 });
+        }
+
+        // **NEW: Check for recent duplicate interviews to prevent spam creation**
+        const recentInterviews = await db
+            .collection("interviews")
+            .where("userId", "==", userid)
+            .where("role", "==", role)
+            .where("type", "==", type)
+            .orderBy("createdAt", "desc")
+            .limit(1)
+            .get();
+
+        // If there's a recent interview created within the last minute, return existing one
+        if (!recentInterviews.empty) {
+            const lastInterview = recentInterviews.docs[0];
+            const lastInterviewData = lastInterview.data();
+            const lastCreated = new Date(lastInterviewData.createdAt);
+            const now = new Date();
+            const timeDiff = now.getTime() - lastCreated.getTime();
+
+            // If created within last 60 seconds, return existing interview
+            if (timeDiff < 60000) {
+                console.log("Returning existing interview to prevent duplicate:", lastInterview.id);
+                return Response.json({
+                    success: true,
+                    interviewId: lastInterview.id,
+                    message: "Using existing recent interview"
+                }, { status: 200 });
+            }
         }
 
         // Create different prompts based on interview type
@@ -149,6 +177,9 @@ export async function POST(request: Request) {
 
         console.log("Parsed questions:", cleanedQuestions);
 
+        // **NEW: Use a transaction to ensure atomic creation**
+        const interviewRef = db.collection("interviews").doc();
+
         const interview = {
             role: role,
             type: type,
@@ -156,7 +187,7 @@ export async function POST(request: Request) {
             techstack: techstack ? techstack.split(",").map((tech: string) => tech.trim()) : [],
             questions: cleanedQuestions,
             userId: userid,
-            finalized: true, // Mark as finalized so it shows in the interviews list
+            finalized: true,
             coverImage: getRandomInterviewCover(),
             createdAt: new Date().toISOString(),
             questionCount: parseInt(amount) || 5,
@@ -165,18 +196,54 @@ export async function POST(request: Request) {
 
         console.log("Creating interview document:", interview);
 
-        const docRef = await db.collection("interviews").add(interview);
+        // Use transaction to prevent race conditions
+        await db.runTransaction(async (transaction) => {
+            // Double-check that no interview was created in the meantime
+            const doubleCheckSnapshot = await transaction.get(
+                db.collection("interviews")
+                    .where("userId", "==", userid)
+                    .where("role", "==", role)
+                    .where("type", "==", type)
+                    .orderBy("createdAt", "desc")
+                    .limit(1)
+            );
 
-        console.log("Interview created successfully with ID:", docRef.id);
+            if (!doubleCheckSnapshot.empty) {
+                const recentDoc = doubleCheckSnapshot.docs[0];
+                const recentData = recentDoc.data();
+                const recentCreated = new Date(recentData.createdAt);
+                const now = new Date();
+                const timeDiff = now.getTime() - recentCreated.getTime();
+
+                if (timeDiff < 60000) {
+                    throw new Error(`DUPLICATE_INTERVIEW:${recentDoc.id}`);
+                }
+            }
+
+            // Create the interview
+            transaction.set(interviewRef, interview);
+        });
+
+        console.log("Interview created successfully with ID:", interviewRef.id);
 
         return Response.json({
             success: true,
-            interviewId: docRef.id,
+            interviewId: interviewRef.id,
             message: "Interview created successfully"
         }, { status: 200 });
 
     } catch (error) {
         console.error("Detailed error creating interview:", error);
+
+        // Handle duplicate interview error
+        if (error instanceof Error && error.message.startsWith('DUPLICATE_INTERVIEW:')) {
+            const existingId = error.message.split(':')[1];
+            return Response.json({
+                success: true,
+                interviewId: existingId,
+                message: "Using existing recent interview"
+            }, { status: 200 });
+        }
 
         // More detailed error logging
         if (error instanceof Error) {
