@@ -15,10 +15,8 @@ interface FeedbackData {
     recommendations?: string[];
 }
 
-// Utility function to parse AI-generated feedback into structured format
 const parseFeedbackFromAI = (aiResponse: string, interviewId: string, userId: string): FeedbackData => {
     try {
-        // Try to parse if it's JSON
         const parsed = JSON.parse(aiResponse);
 
         return {
@@ -32,20 +30,17 @@ const parseFeedbackFromAI = (aiResponse: string, interviewId: string, userId: st
             recommendations: parsed.recommendations || []
         };
     } catch {
-        // If not JSON, extract information using regex/text parsing
         const feedbackData: FeedbackData = {
             interviewId,
             userId,
             feedback: aiResponse
         };
 
-        // Extract overall score
         const scoreMatch = aiResponse.match(/(?:overall\s+score|score)[:=]\s*(\d+(?:\.\d+)?)\s*(?:\/\s*10)?/i);
         if (scoreMatch) {
             feedbackData.overallScore = parseFloat(scoreMatch[1]);
         }
 
-        // Extract strengths
         const strengthsMatch = aiResponse.match(/(?:strengths?|positive\s+aspects?)[:=]\s*(.*?)(?:\n\n|\n(?:[A-Z]|$))/is);
         if (strengthsMatch) {
             feedbackData.strengths = strengthsMatch[1]
@@ -54,7 +49,6 @@ const parseFeedbackFromAI = (aiResponse: string, interviewId: string, userId: st
                 .filter(s => s.length > 0);
         }
 
-        // Extract improvements
         const improvementsMatch = aiResponse.match(/(?:improvements?|areas?\s+for\s+improvement|weaknesses?)[:=]\s*(.*?)(?:\n\n|\n(?:[A-Z]|$))/is);
         if (improvementsMatch) {
             feedbackData.improvements = improvementsMatch[1]
@@ -63,7 +57,6 @@ const parseFeedbackFromAI = (aiResponse: string, interviewId: string, userId: st
                 .filter(s => s.length > 0);
         }
 
-        // Extract recommendations
         const recommendationsMatch = aiResponse.match(/(?:recommendations?|suggestions?)[:=]\s*(.*?)(?:\n\n|\n(?:[A-Z]|$))/is);
         if (recommendationsMatch) {
             feedbackData.recommendations = recommendationsMatch[1]
