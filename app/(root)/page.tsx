@@ -1,10 +1,39 @@
-async function Home() {
-    const user = await getCurrentUser();
+'use client';
 
-    const [userInterviews, allInterview] = await Promise.all([
-        getInterviewsByUserId(user?.id!) ?? [],
-        getLatestInterviews({ userId: user?.id! }) ?? [],
-    ]);
+import { useState, useEffect } from 'react';
+
+export default function Home() {
+    const [user, setUser] = useState(null);
+    const [userInterviews, setUserInterviews] = useState([]);
+    const [allInterview, setAllInterview] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchData() {
+            try {
+                const currentUser = await getCurrentUser();
+                setUser(currentUser);
+
+                const [interviews, latest] = await Promise.all([
+                    getInterviewsByUserId(currentUser?.id!) ?? [],
+                    getLatestInterviews({ userId: currentUser?.id! }) ?? [],
+                ]);
+
+                setUserInterviews(interviews);
+                setAllInterview(latest);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchData();
+    }, []);
+
+    if (loading) {
+        return <div>Loading...</div>;
+    }
 
     const hasPastInterviews = userInterviews.length > 0;
     const hasUpcomingInterviews = allInterview.length > 0;
