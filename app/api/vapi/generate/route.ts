@@ -62,7 +62,7 @@ export const useFeedbackSubmission = () => {
 };
 
 // Utility function to parse AI-generated feedback into structured format
-export const parseFeedbackFromAI = (aiResponse: string, interviewId: string, userId: string) => {
+export const parseFeedbackFromAI = (aiResponse: string, interviewId: string, userId: string): FeedbackData => {
     try {
         // Try to parse if it's JSON
         const parsed = JSON.parse(aiResponse);
@@ -116,3 +116,8 @@ export const parseFeedbackFromAI = (aiResponse: string, interviewId: string, use
                 .split(/[•\-\n]/)
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
+        }
+
+        return feedbackData;
+    }
+};
