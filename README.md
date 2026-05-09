@@ -1,3 +1,4 @@
+![banner](banner-interview.svg)
 📌 Overview
 AI Mock Interview is a web application that helps job seekers practice interviews using artificial intelligence. The platform provides realistic interview questions, records responses, and delivers instant feedback to help users improve their interview performance.
 
